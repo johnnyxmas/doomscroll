@@ -1,0 +1,16 @@
+# Temporary files
+/tmp/
+*.tmp
+*.bak
+*.swp
+
+# Doom files
+*.lmp
+*.wad
+
+# Frame captures
+/frames/
+*.png
+
+# Local configuration
+*.local
