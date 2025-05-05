@@ -1,93 +1,61 @@
 #!/bin/bash
 
-# Configuration
-FPS=10
-WIDTH=80
-HEIGHT=25
-DOOM_CONFIG="$HOME/.chocolate-doom/chocolate-doom.cfg"
-TMP_DIR="/tmp/doomscroll"
+# Chocolate Doom launcher script with improved WAD detection
+WAD_DIR="./wad"
+IWAD=""
 
-# Check dependencies
-check_deps() {
-    local missing=()
-    for dep in autoconf automake make chafa ffmpeg; do
-        if ! command -v $dep &> /dev/null; then
-            missing+=("$dep")
+echo "Debug: Checking WAD directory at $(realpath "$WAD_DIR" 2>/dev/null || echo "$WAD_DIR")"
+
+# Check if WAD directory exists and is accessible
+if [ -d "$WAD_DIR" ]; then
+    echo "Debug: WAD directory exists"
+    if [ -r "$WAD_DIR" ]; then
+        echo "Debug: WAD directory is readable"
+        
+        # Find all WAD files (case insensitive, including hidden)
+        shopt -s nullglob dotglob nocaseglob
+        WADS=("$WAD_DIR"/*.[Ww][Aa][Dd])
+        shopt -u nullglob dotglob nocaseglob
+        
+        echo "Debug: Found ${#WADS[@]} WAD files:"
+        for wad in "${WADS[@]}"; do
+            echo " - $wad"
+        done
+        
+        if [ ${#WADS[@]} -gt 0 ]; then
+            echo "Available WAD files:"
+            for i in "${!WADS[@]}"; do
+                echo "$((i+1)). ${WADS[$i]##*/}"
+            done
+            
+            read -rp "Enter number of WAD to use (or press Enter to specify path): " selection
+            if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le ${#WADS[@]} ]; then
+                IWAD="${WADS[$((selection-1))]}"
+            fi
+        else
+            echo "No WAD files found in $WAD_DIR directory"
         fi
-    done
-
-    if [ ${#missing[@]} -gt 0 ]; then
-        echo "Missing dependencies: ${missing[*]}"
-        echo "Install with: brew install ${missing[*]}"
-        exit 1
+    else
+        echo "Error: Cannot read WAD directory $WAD_DIR (permission denied)"
     fi
-}
+else
+    echo "WAD directory $WAD_DIR does not exist"
+fi
 
-# Build Chocolate Doom from submodule
-build_doom() {
-    if [ ! -d "doom" ]; then
-        echo "Error: doom submodule not found"
-        exit 1
-    fi
+# If no WAD selected from directory, prompt for path
+if [ -z "$IWAD" ]; then
+    echo "Please provide path to your DOOM.WAD or other IWAD file:"
+    read -r IWAD
+fi
 
-    cd doom || exit 1
-    if [ ! -f "configure" ]; then
-        ./autogen.sh
-    fi
-    ./configure
-    make
-    cd ..
-}
+# Convert to absolute path and validate
+IWAD=$(realpath "$IWAD" 2>/dev/null || echo "$IWAD")
+if [ ! -f "$IWAD" ]; then
+    echo "Error: WAD file not found at $IWAD"
+    echo "Note: You need the original DOOM.WAD or other IWAD file to play"
+    exit 1
+fi
 
-# Setup temporary directory
-setup_tempdir() {
-    mkdir -p "$TMP_DIR/frames"
-    trap 'rm -rf "$TMP_DIR"' EXIT
-}
-
-# Configure Chocolate Doom for headless capture
-configure_doom() {
-    mkdir -p "$(dirname "$DOOM_CONFIG")"
-    cat > "$DOOM_CONFIG" <<-EOL
-        [video]
-        fullscreen = false
-        width = 320
-        height = 200
-        display = 0
-        grabmouse = true
-        [sound]
-        samplerate = 0
-        [default]
-        skill = 3
-EOL
-}
-
-# Main function
-main() {
-    check_deps
-    build_doom
-    setup_tempdir
-    configure_doom
-
-    echo "Starting DoomScroll - Press Ctrl+C to stop"
-    echo "Use terminal scrollback to view gameplay"
-
-    # Run Doom and capture frames
-    ./doom/src/chocolate-doom -iwad "$TMP_DIR/doom.wad" -record "$TMP_DIR/demo.lmp" &
-    DOOM_PID=$!
-
-    # Wait for demo to finish or be interrupted
-    wait $DOOM_PID
-
-    # Convert demo to video
-    ffmpeg -i "$TMP_DIR/demo.lmp" -vf fps=$FPS "$TMP_DIR/frames/frame%04d.png"
-
-    # Convert frames to ANSI and output
-    for frame in "$TMP_DIR/frames"/*.png; do
-        clear
-        chafa -c 256 --symbols all -w $WIDTH -h $HEIGHT "$frame"
-        sleep 0.1
-    done
-}
-
-main "$@"
+# Run Chocolate Doom with the specified WAD
+cd doom || exit 1
+exec ./src/chocolate-doom -iwad "$IWAD"
