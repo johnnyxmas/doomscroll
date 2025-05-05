@@ -10,7 +10,7 @@ TMP_DIR="/tmp/doomscroll"
 # Check dependencies
 check_deps() {
     local missing=()
-    for dep in chocolate-doom chafa ffmpeg; do
+    for dep in autoconf automake make chafa ffmpeg; do
         if ! command -v $dep &> /dev/null; then
             missing+=("$dep")
         fi
@@ -21,6 +21,22 @@ check_deps() {
         echo "Install with: brew install ${missing[*]}"
         exit 1
     fi
+}
+
+# Build Chocolate Doom from submodule
+build_doom() {
+    if [ ! -d "doom" ]; then
+        echo "Error: doom submodule not found"
+        exit 1
+    fi
+
+    cd doom || exit 1
+    if [ ! -f "configure" ]; then
+        ./autogen.sh
+    fi
+    ./configure
+    make
+    cd ..
 }
 
 # Setup temporary directory
@@ -49,6 +65,7 @@ EOL
 # Main function
 main() {
     check_deps
+    build_doom
     setup_tempdir
     configure_doom
 
@@ -56,7 +73,7 @@ main() {
     echo "Use terminal scrollback to view gameplay"
 
     # Run Doom and capture frames
-    chocolate-doom -iwad "$TMP_DIR/doom.wad" -record "$TMP_DIR/demo.lmp" &
+    ./doom/src/chocolate-doom -iwad "$TMP_DIR/doom.wad" -record "$TMP_DIR/demo.lmp" &
     DOOM_PID=$!
 
     # Wait for demo to finish or be interrupted
